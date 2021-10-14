@@ -50,51 +50,26 @@ export default class DataManager {
 
   setData(data) {
     this.selectedCount = 0;
-    let prevDataObject = {};
-    if (this.data.length !== 0 && this.data[0].id !== undefined) {
-      prevDataObject = this.data.reduce((obj, row) => {
-        obj[row.tableData.id] = row.tableData;
-        return obj;
-      }, {});
-    }
-    if (process.env.NODE_ENV === 'development' && !this.checkForId) {
-      this.checkForId = true;
-      if (data.some((d) => d.id === undefined)) {
-        console.warn(
-          'The table requires all rows to have an unique id property. A row was provided without id in the rows prop. To prevent the loss of state between renders, please provide an unique id for each row.'
-        );
-      }
-    }
+    const prevData = this.data; // current data has info regarding what is open/being edited
     this.data = data.map((row, index) => {
-      const prevTableData = prevDataObject[row.id] || {};
-      const tableData = {
-        id: row.id || index,
-        // `uuid` acts as our 'key' and is generated when new data
-        // is passed into material-table externally.
-        uuid: row.uuid || uuid.v4(),
-        ...prevTableData,
-        ...row.tableData
-      };
-      if (tableData.checked) {
+      let prevTableData = [];
+      const rowID = row.id || index; //allow use the opportunity to set their own ID
+      // if this row is in our old data, keep the tableData
+      if (prevData[index]) {
+        const prevRow = prevData[index];
+        prevTableData = prevRow.tableData; // hold onto tableData
+        delete prevRow.tableData; // clean the prevRow for compare
+        // if the user is passing an id we can assume they always have been and thus check if the ids match and clear prevData if they don't match
+        if (row.id && row.id !== prevTableData.id) {
+          prevTableData = [];
+        }
+      }
+
+      row.tableData = { ...row.tableData, ...prevTableData, id: rowID }; // combine previous table data for this row with this row's data to insure user interaction not cancelled
+      if (row.tableData.checked) {
         this.selectedCount++;
       }
-      const newRow = {
-        ...row,
-        tableData
-      };
-      if (
-        this.lastDetailPanelRow &&
-        this.lastDetailPanelRow.tableData === prevTableData
-      ) {
-        this.lastDetailPanelRow = newRow;
-      }
-      if (
-        this.lastEditingRow &&
-        this.lastEditingRow.tableData === prevTableData
-      ) {
-        this.lastEditingRow = newRow;
-      }
-      return newRow;
+      return row;
     });
 
     this.filtered = false;
