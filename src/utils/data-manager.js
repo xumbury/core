@@ -65,39 +65,23 @@ export default class DataManager {
         );
       }
     }
-    this.data = data.map((row, index) => {
-      const prevTableData = prevDataObject[row.id] || {};
-      const tableData = {
-        id: row.id || index,
-        // `uuid` acts as our 'key' and is generated when new data
-        // is passed into material-table externally.
-        uuid: row.uuid || uuid.v4(),
-        ...prevTableData,
-        ...row.tableData
-      };
-      if (tableData.checked) {
-        this.selectedCount++;
-      }
-      const newRow = {
-        ...row,
-        tableData
-      };
-      if (
-        this.lastDetailPanelRow &&
-        this.lastDetailPanelRow.tableData === prevTableData
-      ) {
-        this.lastDetailPanelRow = newRow;
-      }
-      if (
-        this.lastEditingRow &&
-        this.lastEditingRow.tableData === prevTableData
-      ) {
-        this.lastEditingRow = newRow;
-      }
-      return newRow;
-    });
+    const prevData = this.data; // current data has info regarding what is open/being edited
 
-    this.filtered = false;
+    this.data = data.map((row, index) => {
+      let prevTableData = [];
+      const rowID = row.id || index; //allow use the opportunity to set their own ID
+      // if this row is in our old data, keep the tableData
+      if (prevData[index]) {
+        const prevRow = prevData[index];
+        prevTableData = prevRow.tableData; // hold onto tableData
+        delete prevRow.tableData; // clean the prevRow for compare
+        // if the user is passing an id we can assume they always have been and thus check if the ids match and clear prevData if they don't match
+        if (row.id && row.id !== prevTableData.id) {
+          prevTableData = [];
+        }
+      }
+
+      row.tableData = { ...row.tableData, ...prevTableData, id: rowID }
   }
 
   setColumns(columns, prevColumns = []) {
@@ -255,9 +239,14 @@ export default class DataManager {
 
   changeRowEditing(rowData, mode) {
     if (rowData) {
-      rowData.tableData.editing = mode;
+      if (rowData.tableData) rowData.tableData.editing = mode;
 
-      if (this.lastEditingRow && this.lastEditingRow != rowData) {
+
+      if (
+        this.lastEditingRow &&
+        this.lastEditingRow.tableData &&
+        this.lastEditingRow != rowData
+      ) {
         this.lastEditingRow.tableData.editing = undefined;
       }
 
@@ -267,7 +256,6 @@ export default class DataManager {
         this.lastEditingRow = undefined;
       }
     } else if (this.lastEditingRow) {
-      this.lastEditingRow.tableData.editing = undefined;
       this.lastEditingRow = undefined;
     }
   }
