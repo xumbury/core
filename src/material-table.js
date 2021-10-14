@@ -170,28 +170,25 @@ export default class MaterialTable extends React.Component {
     this.dataManager.changeDetailPanelType(props.options.detailPanelType);
   }
 
-  cleanProps(dirtyProps) {
-    return dirtyProps.map((prop) => {
-      const propClone = { ...prop };
-      delete propClone.tableData;
-      delete propClone.render;
-      return propClone;
+  cleanColumns(columns) {
+    return columns.map((col) => {
+      const colClone = { ...col };
+      delete colClone.tableData;
+      return colClone;
     });
   }
 
   componentDidUpdate(prevProps) {
     // const propsChanged = Object.entries(this.props).reduce((didChange, prop) => didChange || prop[1] !== prevProps[prop[0]], false);
 
-    const fixedPrevColumns = this.cleanProps(prevProps.columns);
-    const fixedPropsColumns = this.cleanProps(this.props.columns);
-    const fixedPrevData = this.cleanProps(prevProps.data);
-    const fixedPropsData = this.cleanProps(this.props.data);
+    const fixedPrevColumns = this.cleanColumns(prevProps.columns);
+    const fixedPropsColumns = this.cleanColumns(this.props.columns);
 
     const columnPropsChanged = !equal(fixedPrevColumns, fixedPropsColumns);
     let propsChanged =
       columnPropsChanged || !equal(prevProps.options, this.props.options);
     if (!this.isRemoteData()) {
-      propsChanged = propsChanged || !equal(fixedPrevData, fixedPropsData);
+      propsChanged = propsChanged || !equal(prevProps.data, this.props.data);
     }
 
     if (propsChanged) {
