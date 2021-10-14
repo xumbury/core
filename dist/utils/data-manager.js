@@ -477,38 +477,72 @@ var DataManager = /*#__PURE__*/ (function () {
         var _this2 = this;
 
         this.selectedCount = 0;
-        var prevData = this.data; // current data has info regarding what is open/being edited
+        var prevDataObject = {};
+
+        if (this.data.length !== 0 && this.data[0].id !== undefined) {
+          prevDataObject = this.data.reduce(function (obj, row) {
+            obj[row.tableData.id] = row.tableData;
+            return obj;
+          }, {});
+        }
+
+        if (process.env.NODE_ENV === 'development' && !this.checkForId) {
+          this.checkForId = true;
+
+          if (
+            data.some(function (d) {
+              return d.id === undefined;
+            })
+          ) {
+            console.warn(
+              'The table requires all rows to have an unique id property. A row was provided without id in the rows prop. To prevent the loss of state between renders, please provide an unique id for each row.'
+            );
+          }
+        }
 
         this.data = data.map(function (row, index) {
-          var prevTableData = [];
-          var rowID = row.id || index; //allow use the opportunity to set their own ID
-          // if this row is in our old data, keep the tableData
+          var prevTableData = prevDataObject[row.id] || {};
 
-          if (prevData[index]) {
-            var prevRow = prevData[index];
-            prevTableData = prevRow.tableData; // hold onto tableData
+          var tableData = _objectSpread(
+            _objectSpread(
+              {
+                id: row.id || index,
+                // `uuid` acts as our 'key' and is generated when new data
+                // is passed into material-table externally.
+                uuid: row.uuid || _uuid['default'].v4()
+              },
+              prevTableData
+            ),
+            row.tableData
+          );
 
-            delete prevRow.tableData; // clean the prevRow for compare
-            // if the user is passing an id we can assume they always have been and thus check if the ids match and clear prevData if they don't match
-
-            if (row.id && row.id !== prevTableData.id) {
-              prevTableData = [];
-            }
-          }
-
-          row.tableData = _objectSpread(
-            _objectSpread(_objectSpread({}, row.tableData), prevTableData),
-            {},
-            {
-              id: rowID
-            }
-          ); // combine previous table data for this row with this row's data to insure user interaction not cancelled
-
-          if (row.tableData.checked) {
+          if (tableData.checked) {
             _this2.selectedCount++;
           }
 
-          return row;
+          var newRow = _objectSpread(
+            _objectSpread({}, row),
+            {},
+            {
+              tableData: tableData
+            }
+          );
+
+          if (
+            _this2.lastDetailPanelRow &&
+            _this2.lastDetailPanelRow.tableData === prevTableData
+          ) {
+            _this2.lastDetailPanelRow = newRow;
+          }
+
+          if (
+            _this2.lastEditingRow &&
+            _this2.lastEditingRow.tableData === prevTableData
+          ) {
+            _this2.lastEditingRow = newRow;
+          }
+
+          return newRow;
         });
         this.filtered = false;
       }
