@@ -25,6 +25,8 @@ var _defineProperty2 = _interopRequireDefault(
 
 var _format = _interopRequireDefault(require('date-fns/format'));
 
+var _uuid = _interopRequireDefault(require('uuid'));
+
 var _2 = require('./');
 
 function ownKeys(object, enumerableOnly) {
@@ -67,6 +69,7 @@ var DataManager = /*#__PURE__*/ (function () {
     var _this = this;
 
     (0, _classCallCheck2['default'])(this, DataManager);
+    (0, _defineProperty2['default'])(this, 'checkForId', false);
     (0, _defineProperty2['default'])(this, 'applyFilters', false);
     (0, _defineProperty2['default'])(this, 'applySearch', false);
     (0, _defineProperty2['default'])(this, 'applySort', false);
@@ -75,11 +78,12 @@ var DataManager = /*#__PURE__*/ (function () {
     (0, _defineProperty2['default'])(this, 'lastDetailPanelRow', undefined);
     (0, _defineProperty2['default'])(this, 'lastEditingRow', undefined);
     (0, _defineProperty2['default'])(this, 'orderBy', -1);
-    (0, _defineProperty2['default'])(this, 'orderDirection', '');
+    (0, _defineProperty2['default'])(this, 'orderDirection', 'desc');
     (0, _defineProperty2['default'])(this, 'pageSize', 5);
     (0, _defineProperty2['default'])(this, 'paging', true);
     (0, _defineProperty2['default'])(this, 'parentFunc', null);
     (0, _defineProperty2['default'])(this, 'searchText', '');
+    (0, _defineProperty2['default'])(this, 'searchDebounceDelay', 500);
     (0, _defineProperty2['default'])(this, 'selectedCount', 0);
     (0, _defineProperty2['default'])(this, 'treefiedDataLength', 0);
     (0, _defineProperty2['default'])(this, 'treeDataMaxLevel', 0);
@@ -103,6 +107,38 @@ var DataManager = /*#__PURE__*/ (function () {
     (0, _defineProperty2['default'])(this, 'sorted', false);
     (0, _defineProperty2['default'])(this, 'paged', false);
     (0, _defineProperty2['default'])(this, 'rootGroupsIndex', {});
+    (0, _defineProperty2['default'])(
+      this,
+      'changeGroupSelected',
+      function (checked, path) {
+        var currentGroup;
+        var currentGroupArray = _this.groupedData;
+        path.forEach(function (value) {
+          currentGroup = currentGroupArray.find(function (group) {
+            return group.value == value;
+          });
+          currentGroupArray = currentGroup.groups;
+        });
+
+        var setCheck = function setCheck(data) {
+          data.forEach(function (element) {
+            if (element.groups.length > 0) {
+              setCheck(element.groups);
+            } else {
+              element.data.forEach(function (d) {
+                if (d.tableData.checked != checked) {
+                  d.tableData.checked = d.tableData.disabled ? false : checked;
+                  _this.selectedCount =
+                    _this.selectedCount + (checked ? 1 : -1);
+                }
+              });
+            }
+          });
+        };
+
+        setCheck([currentGroup]);
+      }
+    );
     (0, _defineProperty2['default'])(
       this,
       'startCellEditable',
@@ -441,38 +477,72 @@ var DataManager = /*#__PURE__*/ (function () {
         var _this2 = this;
 
         this.selectedCount = 0;
-        var prevData = this.data; // current data has info regarding what is open/being edited
+        var prevDataObject = {};
+
+        if (this.data.length !== 0 && this.data[0].id !== undefined) {
+          prevDataObject = this.data.reduce(function (obj, row) {
+            obj[row.tableData.id] = row.tableData;
+            return obj;
+          }, {});
+        }
+
+        if (process.env.NODE_ENV === 'development' && !this.checkForId) {
+          this.checkForId = true;
+
+          if (
+            data.some(function (d) {
+              return d.id === undefined;
+            })
+          ) {
+            console.warn(
+              'The table requires all rows to have an unique id property. A row was provided without id in the rows prop. To prevent the loss of state between renders, please provide an unique id for each row.'
+            );
+          }
+        }
 
         this.data = data.map(function (row, index) {
-          var prevTableData = [];
-          var rowID = row.id || index; //allow use the opportunity to set their own ID
-          // if this row is in our old data, keep the tableData
+          var prevTableData = prevDataObject[row.id] || {};
 
-          if (prevData[index]) {
-            var prevRow = prevData[index];
-            prevTableData = prevRow.tableData; // hold onto tableData
+          var tableData = _objectSpread(
+            _objectSpread(
+              {
+                id: row.id || index,
+                // `uuid` acts as our 'key' and is generated when new data
+                // is passed into material-table externally.
+                uuid: row.uuid || _uuid['default'].v4()
+              },
+              prevTableData
+            ),
+            row.tableData
+          );
 
-            delete prevRow.tableData; // clean the prevRow for compare
-            // if the user is passing an id we can assume they always have been and thus check if the ids match and clear prevData if they don't match
-
-            if (row.id && row.id !== prevTableData.id) {
-              prevTableData = [];
-            }
-          }
-
-          row.tableData = _objectSpread(
-            _objectSpread(_objectSpread({}, row.tableData), prevTableData),
-            {},
-            {
-              id: rowID
-            }
-          ); // combine previous table data for this row with this row's data to insure user interaction not cancelled
-
-          if (row.tableData.checked) {
+          if (tableData.checked) {
             _this2.selectedCount++;
           }
 
-          return row;
+          var newRow = _objectSpread(
+            _objectSpread({}, row),
+            {},
+            {
+              tableData: tableData
+            }
+          );
+
+          if (
+            _this2.lastDetailPanelRow &&
+            _this2.lastDetailPanelRow.tableData === prevTableData
+          ) {
+            _this2.lastDetailPanelRow = newRow;
+          }
+
+          if (
+            _this2.lastEditingRow &&
+            _this2.lastEditingRow.tableData === prevTableData
+          ) {
+            _this2.lastEditingRow = newRow;
+          }
+
+          return newRow;
         });
         this.filtered = false;
       }
@@ -480,30 +550,44 @@ var DataManager = /*#__PURE__*/ (function () {
     {
       key: 'setColumns',
       value: function setColumns(columns) {
-        var undefinedWidthColumns = columns.filter(function (c) {
-          return c.width === undefined && c.columnDef
-            ? c.columnDef.tableData.width === undefined
-            : true && !c.hidden;
-        });
+        var prevColumns =
+          arguments.length > 1 && arguments[1] !== undefined
+            ? arguments[1]
+            : [];
         var usedWidth = ['0px'];
         this.columns = columns.map(function (columnDef, index) {
-          columnDef.tableData = _objectSpread(
+          var width =
+            typeof columnDef.width === 'number'
+              ? columnDef.width + 'px'
+              : columnDef.width;
+
+          if (
+            width &&
+            columnDef.tableData &&
+            columnDef.tableData.width !== undefined
+          ) {
+            usedWidth.push(width);
+          }
+
+          var prevColumn = prevColumns.find(function (_ref) {
+            var id = _ref.id;
+            return id === index;
+          });
+
+          var tableData = _objectSpread(
             _objectSpread(
-              {
-                columnOrder: index,
-                filterValue: columnDef.defaultFilter,
-                groupOrder: columnDef.defaultGroupOrder,
-                groupSort: columnDef.defaultGroupSort || 'asc',
-                width:
-                  typeof columnDef.width === 'number'
-                    ? columnDef.width + 'px'
-                    : columnDef.width,
-                initialWidth:
-                  typeof columnDef.width === 'number'
-                    ? columnDef.width + 'px'
-                    : columnDef.width,
-                additionalWidth: 0
-              },
+              _objectSpread(
+                {
+                  columnOrder: index,
+                  filterValue: columnDef.defaultFilter,
+                  groupOrder: columnDef.defaultGroupOrder,
+                  groupSort: columnDef.defaultGroupSort || 'asc',
+                  width: width,
+                  initialWidth: width,
+                  additionalWidth: 0
+                },
+                prevColumn ? prevColumn.tableData : {}
+              ),
               columnDef.tableData
             ),
             {},
@@ -512,11 +596,25 @@ var DataManager = /*#__PURE__*/ (function () {
             }
           );
 
-          if (columnDef.tableData.width !== undefined) {
-            usedWidth.push(columnDef.tableData.width);
+          columnDef.tableData = tableData;
+          return columnDef;
+        });
+        var undefinedWidthColumns = this.columns.filter(function (c) {
+          if (c.hidden) {
+            // Hidden column
+            return false;
           }
 
-          return columnDef;
+          if (
+            c.columnDef &&
+            c.columnDef.tableData &&
+            c.columnDef.tableData.width
+          ) {
+            // tableData.width already calculated
+            return false;
+          } // Calculate width if no value provided
+
+          return c.width === undefined;
         });
         usedWidth = '(' + usedWidth.join(' + ') + ')';
         undefinedWidthColumns.forEach(function (columnDef) {
@@ -655,16 +753,18 @@ var DataManager = /*#__PURE__*/ (function () {
       }
     },
     {
+      key: 'changeSearchDebounce',
+      value: function changeSearchDebounce(searchDebounceDelay) {
+        this.searchDebounceDelay = searchDebounceDelay;
+      }
+    },
+    {
       key: 'changeRowEditing',
       value: function changeRowEditing(rowData, mode) {
         if (rowData) {
-          if (rowData.tableData) rowData.tableData.editing = mode;
+          rowData.tableData.editing = mode;
 
-          if (
-            this.lastEditingRow &&
-            this.lastEditingRow.tableData &&
-            this.lastEditingRow != rowData
-          ) {
+          if (this.lastEditingRow && this.lastEditingRow != rowData) {
             this.lastEditingRow.tableData.editing = undefined;
           }
 
@@ -674,6 +774,7 @@ var DataManager = /*#__PURE__*/ (function () {
             this.lastEditingRow = undefined;
           }
         } else if (this.lastEditingRow) {
+          this.lastEditingRow.tableData.editing = undefined;
           this.lastEditingRow = undefined;
         }
       }
@@ -686,8 +787,19 @@ var DataManager = /*#__PURE__*/ (function () {
     },
     {
       key: 'changeAllSelected',
-      value: function changeAllSelected(checked) {
+      value: function changeAllSelected(checked, selectionProps) {
         var selectedCount = 0;
+
+        var isChecked = function isChecked(row) {
+          var selectionResult = selectionProps
+            ? selectionProps(row)
+            : {
+                disabled: false
+              };
+          return row.tableData.disabled || selectionResult.disabled
+            ? false
+            : checked;
+        };
 
         if (this.isDataType('group')) {
           var setCheck = function setCheck(data) {
@@ -696,7 +808,7 @@ var DataManager = /*#__PURE__*/ (function () {
                 setCheck(element.groups);
               } else {
                 element.data.forEach(function (d) {
-                  d.tableData.checked = d.tableData.disabled ? false : checked;
+                  d.tableData.checked = isChecked(d);
                   selectedCount++;
                 });
               }
@@ -705,9 +817,8 @@ var DataManager = /*#__PURE__*/ (function () {
 
           setCheck(this.groupedData);
         } else {
-          this.searchedData.map(function (row) {
-            row.tableData.checked = row.tableData.disabled ? false : checked;
-            return row;
+          this.searchedData.forEach(function (row) {
+            row.tableData.checked = isChecked(row);
           });
           selectedCount = this.searchedData.length;
         }
@@ -743,8 +854,11 @@ var DataManager = /*#__PURE__*/ (function () {
     {
       key: 'changeColumnHidden',
       value: function changeColumnHidden(column, hidden) {
-        column.hidden = hidden;
-        column.hiddenByColumnsButton = hidden;
+        column.hidden = hidden; // https://github.com/mbrn/material-table/pull/2655
+        // https://github.com/material-table-core/core/issues/20#issuecomment-752265651
+        // Fix #20
+
+        this.setColumns(this.columns);
       }
     },
     {
@@ -891,22 +1005,23 @@ var DataManager = /*#__PURE__*/ (function () {
         var column = this.columns.find(function (c) {
           return c.tableData.id === id;
         });
-        if (!column) return;
+
+        if (!column) {
+          return;
+        }
+
         var nextColumn = this.columns.find(function (c) {
           return c.tableData.id === id + 1;
         });
-        if (!nextColumn) return; // console.log("S i: " + column.tableData.initialWidth);
-        // console.log("S a: " + column.tableData.additionalWidth);
-        // console.log("S w: " + column.tableData.width);
+
+        if (!nextColumn) {
+          return;
+        }
 
         column.tableData.additionalWidth = additionalWidth;
         column.tableData.width = 'calc('
           .concat(column.tableData.initialWidth, ' + ')
-          .concat(column.tableData.additionalWidth, 'px)'); // nextColumn.tableData.additionalWidth = -1 * additionalWidth;
-        // nextColumn.tableData.width = `calc(${nextColumn.tableData.initialWidth} + ${nextColumn.tableData.additionalWidth}px)`;
-        // console.log("F i: " + column.tableData.initialWidth);
-        // console.log("F a: " + column.tableData.additionalWidth);
-        // console.log("F w: " + column.tableData.width);
+          .concat(column.tableData.additionalWidth, 'px)');
       }
     },
     {
@@ -973,6 +1088,11 @@ var DataManager = /*#__PURE__*/ (function () {
         var columnDef = this.columns.find(function (_) {
           return _.tableData.id === _this4.orderBy;
         });
+
+        if (!columnDef) {
+          columnDef = this.columns[0];
+        }
+
         var result = list;
 
         if (columnDef.customSort) {
@@ -1257,17 +1377,44 @@ var DataManager = /*#__PURE__*/ (function () {
             }
           };
 
-          this.sortedData = sortGroups(this.sortedData, groups[0]);
+          this.sortedData = sortGroups(this.sortedData, groups[0]); // If you have nested grouped rows and wanted to select one of those row
+          // there was an issue.
+          // -https://github.com/material-table-core/core/pull/74
+          // -https://github.com/mbrn/material-table/issues/2258
+          // -https://github.com/mbrn/material-table/issues/2249
+          // getGroupsIndex resolves this nested grouped rows selection issue.
+
+          var getGroupsIndex = function getGroupsIndex(groups) {
+            return groups.reduce(function (result, group) {
+              result[group.value] = groups.findIndex(function (g) {
+                return g.value === group.value;
+              });
+              return result;
+            }, {});
+          };
 
           var sortGroupData = function sortGroupData(list, level) {
             list.forEach(function (element) {
               if (element.groups.length > 0) {
                 var column = groups[level];
-                element.groups = sortGroups(element.groups, column);
+                element.groups = sortGroups(element.groups, column); // For grouped rows that are nested
+
+                element.groupsIndex = getGroupsIndex(element.groups);
                 sortGroupData(element.groups, level + 1);
               } else {
                 if (_this7.orderBy >= 0 && _this7.orderDirection) {
                   element.data = _this7.sortList(element.data);
+                } else if (_this7.orderDirection === '') {
+                  element.data = element.data.sort(function (a, b) {
+                    return (
+                      _this7.data.findIndex(function (val) {
+                        return val.tableData.id === a.tableData.id;
+                      }) -
+                      _this7.data.findIndex(function (val) {
+                        return val.tableData.id === b.tableData.id;
+                      })
+                    );
+                  });
                 }
               }
             });
