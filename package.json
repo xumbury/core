@@ -23,7 +23,7 @@
     "lint:fix": "npx eslint src/** -c ./.eslintrc --ignore-path ./.eslintignore --fix",
     "prettify": "npx prettier -c ./.prettierrc --write **/*.js",
     "test": "npx jest",
-    "prepare": "npm run build",
+    "prepare": "npm run build:babel",
     "test:build": "npx jest __tests__/post.build.test.js",
     "release:major": "changelog -M && git add CHANGELOG.md && git commit -m 'updated CHANGELOG.md' && npm version major -m 'Release v%s' && npm run git:push:tags",
     "release:minor": "changelog -m && git add CHANGELOG.md && git commit -m 'updated CHANGELOG.md' && npm version minor -m 'Release v%s' && npm run git:push:tags",
