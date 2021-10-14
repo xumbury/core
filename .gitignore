@@ -2,11 +2,11 @@
 .vscode
 dist
 dist_esbuild
-node_modules
 yarn.lock
 .idea
 .DS_Store
 *.iml
+node_modules
 cypress/videos
 __tests__/coverage
 /exporters
