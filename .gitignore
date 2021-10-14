@@ -1,6 +1,5 @@
 .docz
 .vscode
-dist
 dist_esbuild
 yarn.lock
 .idea
