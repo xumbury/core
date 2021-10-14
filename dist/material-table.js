@@ -57,8 +57,6 @@ var _debounce = require('debounce');
 
 var _react2 = _interopRequireDefault(require('fast-deep-equal/react'));
 
-var _cloneDeep = _interopRequireDefault(require('lodash/cloneDeep'));
-
 var _core = require('@material-ui/core');
 
 var _reactBeautifulDnd = require('react-beautiful-dnd');
@@ -586,15 +584,6 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
                 query.totalCount = result.totalCount;
                 query.page = result.page;
 
-                var nextQuery = _objectSpread(
-                  _objectSpread({}, query),
-                  {},
-                  {
-                    totalCount: result.totalCount,
-                    page: result.page
-                  }
-                );
-
                 _this.dataManager.setData(result.data);
 
                 _this.setState(
@@ -608,7 +597,7 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
                     ),
                     {},
                     {
-                      query: nextQuery
+                      query: query
                     }
                   ),
                   function () {
@@ -1037,15 +1026,7 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
           ),
           function () {
             if (_this2.isRemoteData()) {
-              _this2.onQueryChange(
-                _objectSpread(
-                  _objectSpread({}, _this2.state.query),
-                  {},
-                  {
-                    page: _this2.props.options.initialPage || 0
-                  }
-                )
-              );
+              _this2.onQueryChange(_this2.state.query);
             }
             /**
              * THIS WILL NEED TO BE REMOVED EVENTUALLY.
@@ -1077,12 +1058,13 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
               : '';
         }
 
-        var columnsCopy = (0, _cloneDeep['default'])(props.columns);
+        var savedColumns = {};
 
         if (props.options.persistentGroupingsId) {
           var materialTableGroupings = localStorage.getItem(
             'material-table-groupings'
           );
+          console.log(materialTableGroupings);
 
           if (materialTableGroupings) {
             materialTableGroupings = JSON.parse(materialTableGroupings);
@@ -1091,26 +1073,19 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
               materialTableGroupings[
                 props.options.persistentGroupingsId
               ].forEach(function (savedGrouping) {
-                var column = columnsCopy.find(function (col) {
-                  return col.field === savedGrouping.field;
-                });
-
-                if (column) {
-                  if (!column.tableData) {
-                    column.tableData = {};
-                  }
-
-                  column.tableData.groupOrder = savedGrouping.groupOrder;
-                  column.tableData.groupSort = savedGrouping.groupSort;
-                  column.tableData.columnOrder = savedGrouping.columnOrder;
-                }
+                savedColumns[savedGrouping.field] = {
+                  groupOrder: savedGrouping.groupOrder,
+                  groupSort: savedGrouping.groupSort,
+                  columnOrder: savedGrouping.columnOrder
+                };
               });
             }
           }
         }
 
-        this.dataManager.setColumns(columnsCopy, prevColumns);
-        this.dataManager.setDefaultExpanded(props.options.defaultExpanded); // this.dataManager.changeRowEditing();
+        this.dataManager.setColumns(props.columns, prevColumns, savedColumns);
+        this.dataManager.setDefaultExpanded(props.options.defaultExpanded);
+        this.dataManager.changeRowEditing();
 
         if (this.isRemoteData(props)) {
           this.dataManager.changeApplySearch(false);
@@ -1146,21 +1121,20 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
             props.options.initialPage ? props.options.initialPage : 0
           );
         isInit && this.dataManager.changePageSize(props.options.pageSize);
-        this.dataManager.changePaging(
-          this.isRemoteData() ? false : props.options.paging
-        );
+        this.dataManager.changePaging(props.options.paging);
         isInit && this.dataManager.changeParentFunc(props.parentChildData);
         this.dataManager.changeDetailPanelType(props.options.detailPanelType);
       }
     },
     {
-      key: 'cleanColumns',
-      value: function cleanColumns(columns) {
-        return columns.map(function (col) {
-          var colClone = _objectSpread({}, col);
+      key: 'cleanProps',
+      value: function cleanProps(dirtyProps) {
+        return dirtyProps.map(function (prop) {
+          var propClone = _objectSpread({}, prop);
 
-          delete colClone.tableData;
-          return colClone;
+          delete propClone.tableData;
+          delete propClone.render;
+          return propClone;
         });
       }
     },
@@ -1168,8 +1142,10 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
       key: 'componentDidUpdate',
       value: function componentDidUpdate(prevProps) {
         // const propsChanged = Object.entries(this.props).reduce((didChange, prop) => didChange || prop[1] !== prevProps[prop[0]], false);
-        var fixedPrevColumns = this.cleanColumns(prevProps.columns);
-        var fixedPropsColumns = this.cleanColumns(this.props.columns);
+        var fixedPrevColumns = this.cleanProps(prevProps.columns);
+        var fixedPropsColumns = this.cleanProps(this.props.columns);
+        var fixedPrevData = this.cleanProps(prevProps.data);
+        var fixedPropsData = this.cleanProps(this.props.data);
         var columnPropsChanged = !(0, _react2['default'])(
           fixedPrevColumns,
           fixedPropsColumns
@@ -1181,7 +1157,7 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
         if (!this.isRemoteData()) {
           propsChanged =
             propsChanged ||
-            !(0, _react2['default'])(prevProps.data, this.props.data);
+            !(0, _react2['default'])(fixedPrevData, fixedPropsData);
         }
 
         if (propsChanged) {

@@ -520,8 +520,14 @@ var DataManager = /*#__PURE__*/ (function () {
           arguments.length > 1 && arguments[1] !== undefined
             ? arguments[1]
             : [];
+        var savedColumns =
+          arguments.length > 2 && arguments[2] !== undefined
+            ? arguments[2]
+            : {};
         var usedWidth = ['0px'];
         this.columns = columns.map(function (columnDef, index) {
+          var _savedColumns$columnD;
+
           var width =
             typeof columnDef.width === 'number'
               ? columnDef.width + 'px'
@@ -539,19 +545,27 @@ var DataManager = /*#__PURE__*/ (function () {
             var id = _ref.id;
             return id === index;
           });
+          var savedColumnTableData =
+            (_savedColumns$columnD = savedColumns[columnDef.field]) !== null &&
+            _savedColumns$columnD !== void 0
+              ? _savedColumns$columnD
+              : {};
 
           var tableData = _objectSpread(
             _objectSpread(
               _objectSpread(
-                {
-                  columnOrder: index,
-                  filterValue: columnDef.defaultFilter,
-                  groupOrder: columnDef.defaultGroupOrder,
-                  groupSort: columnDef.defaultGroupSort || 'asc',
-                  width: width,
-                  initialWidth: width,
-                  additionalWidth: 0
-                },
+                _objectSpread(
+                  {
+                    columnOrder: index,
+                    filterValue: columnDef.defaultFilter,
+                    groupOrder: columnDef.defaultGroupOrder,
+                    groupSort: columnDef.defaultGroupSort || 'asc',
+                    width: width,
+                    initialWidth: width,
+                    additionalWidth: 0
+                  },
+                  savedColumnTableData
+                ),
                 prevColumn ? prevColumn.tableData : {}
               ),
               columnDef.tableData
@@ -728,9 +742,13 @@ var DataManager = /*#__PURE__*/ (function () {
       key: 'changeRowEditing',
       value: function changeRowEditing(rowData, mode) {
         if (rowData) {
-          rowData.tableData.editing = mode;
+          if (rowData.tableData) rowData.tableData.editing = mode;
 
-          if (this.lastEditingRow && this.lastEditingRow != rowData) {
+          if (
+            this.lastEditingRow &&
+            this.lastEditingRow.tableData &&
+            this.lastEditingRow != rowData
+          ) {
             this.lastEditingRow.tableData.editing = undefined;
           }
 
@@ -740,7 +758,6 @@ var DataManager = /*#__PURE__*/ (function () {
             this.lastEditingRow = undefined;
           }
         } else if (this.lastEditingRow) {
-          this.lastEditingRow.tableData.editing = undefined;
           this.lastEditingRow = undefined;
         }
       }
