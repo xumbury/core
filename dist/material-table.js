@@ -1154,14 +1154,13 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
       }
     },
     {
-      key: 'cleanProps',
-      value: function cleanProps(dirtyProps) {
-        return dirtyProps.map(function (prop) {
-          var propClone = _objectSpread({}, prop);
+      key: 'cleanColumns',
+      value: function cleanColumns(columns) {
+        return columns.map(function (col) {
+          var colClone = _objectSpread({}, col);
 
-          delete propClone.tableData;
-          delete propClone.render;
-          return propClone;
+          delete colClone.tableData;
+          return colClone;
         });
       }
     },
@@ -1169,10 +1168,8 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
       key: 'componentDidUpdate',
       value: function componentDidUpdate(prevProps) {
         // const propsChanged = Object.entries(this.props).reduce((didChange, prop) => didChange || prop[1] !== prevProps[prop[0]], false);
-        var fixedPrevColumns = this.cleanProps(prevProps.columns);
-        var fixedPropsColumns = this.cleanProps(this.props.columns);
-        var fixedPrevData = this.cleanProps(prevProps.data);
-        var fixedPropsData = this.cleanProps(this.props.data);
+        var fixedPrevColumns = this.cleanColumns(prevProps.columns);
+        var fixedPropsColumns = this.cleanColumns(this.props.columns);
         var columnPropsChanged = !(0, _react2['default'])(
           fixedPrevColumns,
           fixedPropsColumns
@@ -1184,7 +1181,7 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
         if (!this.isRemoteData()) {
           propsChanged =
             propsChanged ||
-            !(0, _react2['default'])(fixedPrevData, fixedPropsData);
+            !(0, _react2['default'])(prevProps.data, this.props.data);
         }
 
         if (propsChanged) {
