@@ -1,7 +1,9 @@
 import formatDate from 'date-fns/format';
+import uuid from 'uuid';
 import { byString } from './';
 
 export default class DataManager {
+  checkForId = false;
   applyFilters = false;
   applySearch = false;
   applySort = false;
@@ -10,11 +12,12 @@ export default class DataManager {
   lastDetailPanelRow = undefined;
   lastEditingRow = undefined;
   orderBy = -1;
-  orderDirection = '';
+  orderDirection = 'desc';
   pageSize = 5;
   paging = true;
   parentFunc = null;
   searchText = '';
+  searchDebounceDelay = 500;
   selectedCount = 0;
   treefiedDataLength = 0;
   treeDataMaxLevel = 0;
@@ -47,63 +50,99 @@ export default class DataManager {
 
   setData(data) {
     this.selectedCount = 0;
-    const prevData = this.data; // current data has info regarding what is open/being edited
-    this.data = data.map((row, index) => {
-      let prevTableData = [];
-      const rowID = row.id || index; //allow use the opportunity to set their own ID
-      // if this row is in our old data, keep the tableData
-      if (prevData[index]) {
-        const prevRow = prevData[index];
-        prevTableData = prevRow.tableData; // hold onto tableData
-        delete prevRow.tableData; // clean the prevRow for compare
-        // if the user is passing an id we can assume they always have been and thus check if the ids match and clear prevData if they don't match
-        if (row.id && row.id !== prevTableData.id) {
-          prevTableData = [];
-        }
+    let prevDataObject = {};
+    if (this.data.length !== 0 && this.data[0].id !== undefined) {
+      prevDataObject = this.data.reduce((obj, row) => {
+        obj[row.tableData.id] = row.tableData;
+        return obj;
+      }, {});
+    }
+    if (process.env.NODE_ENV === 'development' && !this.checkForId) {
+      this.checkForId = true;
+      if (data.some((d) => d.id === undefined)) {
+        console.warn(
+          'The table requires all rows to have an unique id property. A row was provided without id in the rows prop. To prevent the loss of state between renders, please provide an unique id for each row.'
+        );
       }
-
-      row.tableData = { ...row.tableData, ...prevTableData, id: rowID }; // combine previous table data for this row with this row's data to insure user interaction not cancelled
-      if (row.tableData.checked) {
+    }
+    this.data = data.map((row, index) => {
+      const prevTableData = prevDataObject[row.id] || {};
+      const tableData = {
+        id: row.id || index,
+        // `uuid` acts as our 'key' and is generated when new data
+        // is passed into material-table externally.
+        uuid: row.uuid || uuid.v4(),
+        ...prevTableData,
+        ...row.tableData
+      };
+      if (tableData.checked) {
         this.selectedCount++;
       }
-      return row;
+      const newRow = {
+        ...row,
+        tableData
+      };
+      if (
+        this.lastDetailPanelRow &&
+        this.lastDetailPanelRow.tableData === prevTableData
+      ) {
+        this.lastDetailPanelRow = newRow;
+      }
+      if (
+        this.lastEditingRow &&
+        this.lastEditingRow.tableData === prevTableData
+      ) {
+        this.lastEditingRow = newRow;
+      }
+      return newRow;
     });
 
     this.filtered = false;
   }
 
-  setColumns(columns) {
-    const undefinedWidthColumns = columns.filter((c) =>
-      c.width === undefined && c.columnDef
-        ? c.columnDef.tableData.width === undefined
-        : true && !c.hidden
-    );
+  setColumns(columns, prevColumns = []) {
     let usedWidth = ['0px'];
 
     this.columns = columns.map((columnDef, index) => {
-      columnDef.tableData = {
+      const width =
+        typeof columnDef.width === 'number'
+          ? columnDef.width + 'px'
+          : columnDef.width;
+
+      if (
+        width &&
+        columnDef.tableData &&
+        columnDef.tableData.width !== undefined
+      ) {
+        usedWidth.push(width);
+      }
+      const prevColumn = prevColumns.find(({ id }) => id === index);
+      const tableData = {
         columnOrder: index,
         filterValue: columnDef.defaultFilter,
         groupOrder: columnDef.defaultGroupOrder,
         groupSort: columnDef.defaultGroupSort || 'asc',
-        width:
-          typeof columnDef.width === 'number'
-            ? columnDef.width + 'px'
-            : columnDef.width,
-        initialWidth:
-          typeof columnDef.width === 'number'
-            ? columnDef.width + 'px'
-            : columnDef.width,
+        width,
+        initialWidth: width,
         additionalWidth: 0,
+        ...(prevColumn ? prevColumn.tableData : {}),
         ...columnDef.tableData,
         id: index
       };
-
-      if (columnDef.tableData.width !== undefined) {
-        usedWidth.push(columnDef.tableData.width);
-      }
-
+      columnDef.tableData = tableData;
       return columnDef;
+    });
+    const undefinedWidthColumns = this.columns.filter((c) => {
+      if (c.hidden) {
+        // Hidden column
+        return false;
+      }
+      if (c.columnDef && c.columnDef.tableData && c.columnDef.tableData.width) {
+        // tableData.width already calculated
+        return false;
+      }
+      // Calculate width if no value provided
+      return c.width === undefined;
     });
 
     usedWidth = '(' + usedWidth.join(' + ') + ')';
@@ -210,15 +249,15 @@ export default class DataManager {
     this.currentPage = 0;
   }
 
+  changeSearchDebounce(searchDebounceDelay) {
+    this.searchDebounceDelay = searchDebounceDelay;
+  }
+
   changeRowEditing(rowData, mode) {
     if (rowData) {
-      if (rowData.tableData) rowData.tableData.editing = mode;
+      rowData.tableData.editing = mode;
 
-      if (
-        this.lastEditingRow &&
-        this.lastEditingRow.tableData &&
-        this.lastEditingRow != rowData
-      ) {
+      if (this.lastEditingRow && this.lastEditingRow != rowData) {
         this.lastEditingRow.tableData.editing = undefined;
       }
 
@@ -228,6 +267,7 @@ export default class DataManager {
         this.lastEditingRow = undefined;
       }
     } else if (this.lastEditingRow) {
+      this.lastEditingRow.tableData.editing = undefined;
       this.lastEditingRow = undefined;
     }
   }
@@ -236,8 +276,16 @@ export default class DataManager {
     this.bulkEditOpen = bulkEditOpen;
   }
 
-  changeAllSelected(checked) {
+  changeAllSelected(checked, selectionProps) {
     let selectedCount = 0;
+    const isChecked = (row) => {
+      const selectionResult = selectionProps
+        ? selectionProps(row)
+        : { disabled: false };
+      return row.tableData.disabled || selectionResult.disabled
+        ? false
+        : checked;
+    };
     if (this.isDataType('group')) {
       const setCheck = (data) => {
         data.forEach((element) => {
@@ -245,7 +293,7 @@ export default class DataManager {
             setCheck(element.groups);
           } else {
             element.data.forEach((d) => {
-              d.tableData.checked = d.tableData.disabled ? false : checked;
+              d.tableData.checked = isChecked(d);
               selectedCount++;
             });
           }
@@ -254,15 +302,41 @@ export default class DataManager {
 
       setCheck(this.groupedData);
     } else {
-      this.searchedData.map((row) => {
-        row.tableData.checked = row.tableData.disabled ? false : checked;
-        return row;
+      this.searchedData.forEach((row) => {
+        row.tableData.checked = isChecked(row);
       });
       selectedCount = this.searchedData.length;
     }
 
     this.selectedCount = checked ? selectedCount : 0;
   }
+
+  changeGroupSelected = (checked, path) => {
+    let currentGroup;
+    let currentGroupArray = this.groupedData;
+
+    path.forEach((value) => {
+      currentGroup = currentGroupArray.find((group) => group.value == value);
+      currentGroupArray = currentGroup.groups;
+    });
+
+    const setCheck = (data) => {
+      data.forEach((element) => {
+        if (element.groups.length > 0) {
+          setCheck(element.groups);
+        } else {
+          element.data.forEach((d) => {
+            if (d.tableData.checked != checked) {
+              d.tableData.checked = d.tableData.disabled ? false : checked;
+              this.selectedCount = this.selectedCount + (checked ? 1 : -1);
+            }
+          });
+        }
+      });
+    };
+
+    setCheck([currentGroup]);
+  };
 
   changeOrder(orderBy, orderDirection) {
     this.orderBy = orderBy;
@@ -286,7 +360,10 @@ export default class DataManager {
 
   changeColumnHidden(column, hidden) {
     column.hidden = hidden;
-    column.hiddenByColumnsButton = hidden;
+    // https://github.com/mbrn/material-table/pull/2655
+    // https://github.com/material-table-core/core/issues/20#issuecomment-752265651
+    // Fix #20
+    this.setColumns(this.columns);
   }
 
   changeTreeExpand(path) {
@@ -420,7 +497,7 @@ export default class DataManager {
 
   finishCellEditable = (rowData, columnDef) => {
     if (rowData.tableData.editCellList) {
-      var index = rowData.tableData.editCellList.findIndex(
+      const index = rowData.tableData.editCellList.findIndex(
         (c) => c.tableData.id === columnDef.tableData.id
       );
       if (index !== -1) {
@@ -442,31 +519,22 @@ export default class DataManager {
 
   onColumnResized(id, additionalWidth) {
     const column = this.columns.find((c) => c.tableData.id === id);
-    if (!column) return;
-
+    if (!column) {
+      return;
+    }
     const nextColumn = this.columns.find((c) => c.tableData.id === id + 1);
-    if (!nextColumn) return;
-
-    // console.log("S i: " + column.tableData.initialWidth);
-    // console.log("S a: " + column.tableData.additionalWidth);
-    // console.log("S w: " + column.tableData.width);
-
+    if (!nextColumn) {
+      return;
+    }
     column.tableData.additionalWidth = additionalWidth;
     column.tableData.width = `calc(${column.tableData.initialWidth} + ${column.tableData.additionalWidth}px)`;
-
-    // nextColumn.tableData.additionalWidth = -1 * additionalWidth;
-    // nextColumn.tableData.width = `calc(${nextColumn.tableData.initialWidth} + ${nextColumn.tableData.additionalWidth}px)`;
-
-    // console.log("F i: " + column.tableData.initialWidth);
-    // console.log("F a: " + column.tableData.additionalWidth);
-    // console.log("F w: " + column.tableData.width);
   }
 
   expandTreeForNodes = (data) => {
     data.forEach((row) => {
       let currentRow = row;
       while (this.parentFunc(currentRow, this.data)) {
-        let parent = this.parentFunc(currentRow, this.data);
+        const parent = this.parentFunc(currentRow, this.data);
         if (parent) {
           parent.tableData.isTreeExpanded = true;
         }
@@ -562,7 +630,10 @@ export default class DataManager {
   }
 
   sortList(list) {
-    const columnDef = this.columns.find((_) => _.tableData.id === this.orderBy);
+    let columnDef = this.columns.find((_) => _.tableData.id === this.orderBy);
+    if (!columnDef) {
+      columnDef = this.columns[0];
+    }
     let result = list;
 
     if (columnDef.customSort) {
@@ -636,7 +707,7 @@ export default class DataManager {
   };
 
   // =====================================================================================================
-  // DATA MANUPULATIONS
+  // DATA MANIPULATIONS
   // =====================================================================================================
 
   filterData = () => {
@@ -817,7 +888,7 @@ export default class DataManager {
 
           if (!group) {
             const path = [...(o.path || []), value];
-            let oldGroup = this.findGroupByGroupPath(
+            const oldGroup = this.findGroupByGroupPath(
               this.groupedData,
               path
             ) || {
@@ -876,7 +947,7 @@ export default class DataManager {
 
     const addRow = (rowData) => {
       rowData.tableData.markedForTreeRemove = false;
-      let parent = this.parentFunc(rowData, this.data);
+      const parent = this.parentFunc(rowData, this.data);
       if (parent) {
         parent.tableData.childRows = parent.tableData.childRows || [];
         if (!parent.tableData.childRows.includes(rowData)) {
@@ -934,7 +1005,7 @@ export default class DataManager {
         !this.columns.some((columnDef) => columnDef.tableData.filterValue)
       ) {
         if (rowData.tableData.isTreeExpanded === undefined) {
-          var isExpanded =
+          const isExpanded =
             typeof this.defaultExpanded === 'boolean'
               ? this.defaultExpanded
               : this.defaultExpanded(rowData);
@@ -956,7 +1027,7 @@ export default class DataManager {
     });
 
     const traverseTreeAndDeleteMarked = (rowDataArray) => {
-      for (var i = rowDataArray.length - 1; i >= 0; i--) {
+      for (let i = rowDataArray.length - 1; i >= 0; i--) {
         const item = rowDataArray[i];
         if (item.tableData.childRows) {
           traverseTreeAndDeleteMarked(item.tableData.childRows);
@@ -999,15 +1070,42 @@ export default class DataManager {
 
       this.sortedData = sortGroups(this.sortedData, groups[0]);
 
+      // If you have nested grouped rows and wanted to select one of those row
+      // there was an issue.
+      // -https://github.com/material-table-core/core/pull/74
+      // -https://github.com/mbrn/material-table/issues/2258
+      // -https://github.com/mbrn/material-table/issues/2249
+      // getGroupsIndex resolves this nested grouped rows selection issue.
+      const getGroupsIndex = (groups) =>
+        groups.reduce((result, group) => {
+          result[group.value] = groups.findIndex(
+            (g) => g.value === group.value
+          );
+          return result;
+        }, {});
+
       const sortGroupData = (list, level) => {
         list.forEach((element) => {
           if (element.groups.length > 0) {
             const column = groups[level];
             element.groups = sortGroups(element.groups, column);
+            // For grouped rows that are nested
+            element.groupsIndex = getGroupsIndex(element.groups);
             sortGroupData(element.groups, level + 1);
           } else {
             if (this.orderBy >= 0 && this.orderDirection) {
               element.data = this.sortList(element.data);
+            } else if (this.orderDirection === '') {
+              element.data = element.data.sort((a, b) => {
+                return (
+                  this.data.findIndex(
+                    (val) => val.tableData.id === a.tableData.id
+                  ) -
+                  this.data.findIndex(
+                    (val) => val.tableData.id === b.tableData.id
+                  )
+                );
+              });
             }
           }
         });
