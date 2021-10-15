@@ -57,6 +57,8 @@ var _debounce = require('debounce');
 
 var _react2 = _interopRequireDefault(require('fast-deep-equal/react'));
 
+var _cloneDeep = _interopRequireDefault(require('lodash/cloneDeep'));
+
 var _core = require('@material-ui/core');
 
 var _reactBeautifulDnd = require('react-beautiful-dnd');
@@ -584,6 +586,15 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
                 query.totalCount = result.totalCount;
                 query.page = result.page;
 
+                var nextQuery = _objectSpread(
+                  _objectSpread({}, query),
+                  {},
+                  {
+                    totalCount: result.totalCount,
+                    page: result.page
+                  }
+                );
+
                 _this.dataManager.setData(result.data);
 
                 _this.setState(
@@ -597,7 +608,7 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
                     ),
                     {},
                     {
-                      query: query
+                      query: nextQuery
                     }
                   ),
                   function () {
@@ -1026,7 +1037,15 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
           ),
           function () {
             if (_this2.isRemoteData()) {
-              _this2.onQueryChange(_this2.state.query);
+              _this2.onQueryChange(
+                _objectSpread(
+                  _objectSpread({}, _this2.state.query),
+                  {},
+                  {
+                    page: _this2.props.options.initialPage || 0
+                  }
+                )
+              );
             }
             /**
              * THIS WILL NEED TO BE REMOVED EVENTUALLY.
@@ -1058,13 +1077,12 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
               : '';
         }
 
-        var savedColumns = {};
+        var columnsCopy = (0, _cloneDeep['default'])(props.columns);
 
         if (props.options.persistentGroupingsId) {
           var materialTableGroupings = localStorage.getItem(
             'material-table-groupings'
           );
-          console.log(materialTableGroupings);
 
           if (materialTableGroupings) {
             materialTableGroupings = JSON.parse(materialTableGroupings);
@@ -1073,17 +1091,25 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
               materialTableGroupings[
                 props.options.persistentGroupingsId
               ].forEach(function (savedGrouping) {
-                savedColumns[savedGrouping.field] = {
-                  groupOrder: savedGrouping.groupOrder,
-                  groupSort: savedGrouping.groupSort,
-                  columnOrder: savedGrouping.columnOrder
-                };
+                var column = columnsCopy.find(function (col) {
+                  return col.field === savedGrouping.field;
+                });
+
+                if (column) {
+                  if (!column.tableData) {
+                    column.tableData = {};
+                  }
+
+                  column.tableData.groupOrder = savedGrouping.groupOrder;
+                  column.tableData.groupSort = savedGrouping.groupSort;
+                  column.tableData.columnOrder = savedGrouping.columnOrder;
+                }
               });
             }
           }
         }
 
-        this.dataManager.setColumns(props.columns, prevColumns, savedColumns);
+        this.dataManager.setColumns(columnsCopy, prevColumns);
         this.dataManager.setDefaultExpanded(props.options.defaultExpanded); // this.dataManager.changeRowEditing();
 
         if (this.isRemoteData(props)) {
@@ -1120,7 +1146,9 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
             props.options.initialPage ? props.options.initialPage : 0
           );
         isInit && this.dataManager.changePageSize(props.options.pageSize);
-        this.dataManager.changePaging(props.options.paging);
+        this.dataManager.changePaging(
+          this.isRemoteData() ? false : props.options.paging
+        );
         isInit && this.dataManager.changeParentFunc(props.parentChildData);
         this.dataManager.changeDetailPanelType(props.options.detailPanelType);
       }

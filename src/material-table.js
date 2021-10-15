@@ -128,7 +128,7 @@ export default class MaterialTable extends React.Component {
 
     this.dataManager.setColumns(columnsCopy, prevColumns);
     this.dataManager.setDefaultExpanded(props.options.defaultExpanded);
-    this.dataManager.changeRowEditing();
+    // this.dataManager.changeRowEditing();
 
     if (this.isRemoteData(props)) {
       this.dataManager.changeApplySearch(false);
@@ -170,25 +170,28 @@ export default class MaterialTable extends React.Component {
     this.dataManager.changeDetailPanelType(props.options.detailPanelType);
   }
 
-  cleanColumns(columns) {
-    return columns.map((col) => {
-      const colClone = { ...col };
-      delete colClone.tableData;
-      return colClone;
+  cleanProps(dirtyProps) {
+    return dirtyProps.map((prop) => {
+      const propClone = { ...prop };
+      delete propClone.tableData;
+      delete propClone.render;
+      return propClone;
     });
   }
 
   componentDidUpdate(prevProps) {
     // const propsChanged = Object.entries(this.props).reduce((didChange, prop) => didChange || prop[1] !== prevProps[prop[0]], false);
 
-    const fixedPrevColumns = this.cleanColumns(prevProps.columns);
-    const fixedPropsColumns = this.cleanColumns(this.props.columns);
+    const fixedPrevColumns = this.cleanProps(prevProps.columns);
+    const fixedPropsColumns = this.cleanProps(this.props.columns);
+    const fixedPrevData = this.cleanProps(prevProps.data);
+    const fixedPropsData = this.cleanProps(this.props.data);
 
     const columnPropsChanged = !equal(fixedPrevColumns, fixedPropsColumns);
     let propsChanged =
       columnPropsChanged || !equal(prevProps.options, this.props.options);
     if (!this.isRemoteData()) {
-      propsChanged = propsChanged || !equal(prevProps.data, this.props.data);
+      propsChanged = propsChanged || !equal(fixedPrevData, fixedPropsData);
     }
 
     if (propsChanged) {
