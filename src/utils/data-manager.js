@@ -100,7 +100,7 @@ export default class DataManager {
     this.filtered = false;
   }
 
-  setColumns(columns, prevColumns = [], savedColumns = {}) {
+  setColumns(columns, prevColumns = []) {
     let usedWidth = ['0px'];
 
     this.columns = columns.map((columnDef, index) => {
@@ -117,7 +117,6 @@ export default class DataManager {
         usedWidth.push(width);
       }
       const prevColumn = prevColumns.find(({ id }) => id === index);
-      const savedColumnTableData = savedColumns[columnDef.field] ?? {};
       const tableData = {
         columnOrder: index,
         filterValue: columnDef.defaultFilter,
@@ -126,7 +125,6 @@ export default class DataManager {
         width,
         initialWidth: width,
         additionalWidth: 0,
-        ...savedColumnTableData,
         ...(prevColumn ? prevColumn.tableData : {}),
         ...columnDef.tableData,
         id: index
@@ -257,13 +255,9 @@ export default class DataManager {
 
   changeRowEditing(rowData, mode) {
     if (rowData) {
-      if (rowData.tableData) rowData.tableData.editing = mode;
+      rowData.tableData.editing = mode;
 
-      if (
-        this.lastEditingRow &&
-        this.lastEditingRow.tableData &&
-        this.lastEditingRow != rowData
-      ) {
+      if (this.lastEditingRow && this.lastEditingRow != rowData) {
         this.lastEditingRow.tableData.editing = undefined;
       }
 
@@ -273,6 +267,7 @@ export default class DataManager {
         this.lastEditingRow = undefined;
       }
     } else if (this.lastEditingRow) {
+      this.lastEditingRow.tableData.editing = undefined;
       this.lastEditingRow = undefined;
     }
   }
