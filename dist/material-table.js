@@ -1084,8 +1084,7 @@ var MaterialTable = /*#__PURE__*/ (function (_React$Component) {
         }
 
         this.dataManager.setColumns(props.columns, prevColumns, savedColumns);
-        this.dataManager.setDefaultExpanded(props.options.defaultExpanded);
-        this.dataManager.changeRowEditing();
+        this.dataManager.setDefaultExpanded(props.options.defaultExpanded); // this.dataManager.changeRowEditing();
 
         if (this.isRemoteData(props)) {
           this.dataManager.changeApplySearch(false);
