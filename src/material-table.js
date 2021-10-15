@@ -1,6 +1,7 @@
 import React from 'react';
 import { debounce } from 'debounce';
 import equal from 'fast-deep-equal/react';
+import cloneDeep from 'lodash/cloneDeep';
 import {
   Table,
   TableFooter,
@@ -64,7 +65,10 @@ export default class MaterialTable extends React.Component {
       },
       () => {
         if (this.isRemoteData()) {
-          this.onQueryChange(this.state.query);
+          this.onQueryChange({
+            ...this.state.query,
+            page: this.props.options.initialPage || 0
+          });
         }
         /**
          * THIS WILL NEED TO BE REMOVED EVENTUALLY.
@@ -92,32 +96,39 @@ export default class MaterialTable extends React.Component {
           : '';
     }
 
-    const savedColumns = {};
+    const columnsCopy = cloneDeep(props.columns);
+
     if (props.options.persistentGroupingsId) {
       let materialTableGroupings = localStorage.getItem(
         'material-table-groupings'
       );
-      console.log(materialTableGroupings);
+
       if (materialTableGroupings) {
         materialTableGroupings = JSON.parse(materialTableGroupings);
 
         if (materialTableGroupings[props.options.persistentGroupingsId]) {
           materialTableGroupings[props.options.persistentGroupingsId].forEach(
             (savedGrouping) => {
-              savedColumns[savedGrouping.field] = {
-                groupOrder: savedGrouping.groupOrder,
-                groupSort: savedGrouping.groupSort,
-                columnOrder: savedGrouping.columnOrder
-              };
+              const column = columnsCopy.find(
+                (col) => col.field === savedGrouping.field
+              );
+              if (column) {
+                if (!column.tableData) {
+                  column.tableData = {};
+                }
+                column.tableData.groupOrder = savedGrouping.groupOrder;
+                column.tableData.groupSort = savedGrouping.groupSort;
+                column.tableData.columnOrder = savedGrouping.columnOrder;
+              }
             }
           );
         }
       }
     }
 
-    this.dataManager.setColumns(props.columns, prevColumns, savedColumns);
+    this.dataManager.setColumns(columnsCopy, prevColumns);
     this.dataManager.setDefaultExpanded(props.options.defaultExpanded);
-    // this.dataManager.changeRowEditing();
+    this.dataManager.changeRowEditing();
 
     if (this.isRemoteData(props)) {
       this.dataManager.changeApplySearch(false);
@@ -152,33 +163,32 @@ export default class MaterialTable extends React.Component {
         props.options.initialPage ? props.options.initialPage : 0
       );
     isInit && this.dataManager.changePageSize(props.options.pageSize);
-    this.dataManager.changePaging(props.options.paging);
+    this.dataManager.changePaging(
+      this.isRemoteData() ? false : props.options.paging
+    );
     isInit && this.dataManager.changeParentFunc(props.parentChildData);
     this.dataManager.changeDetailPanelType(props.options.detailPanelType);
   }
 
-  cleanProps(dirtyProps) {
-    return dirtyProps.map((prop) => {
-      const propClone = { ...prop };
-      delete propClone.tableData;
-      delete propClone.render;
-      return propClone;
+  cleanColumns(columns) {
+    return columns.map((col) => {
+      const colClone = { ...col };
+      delete colClone.tableData;
+      return colClone;
     });
   }
 
   componentDidUpdate(prevProps) {
     // const propsChanged = Object.entries(this.props).reduce((didChange, prop) => didChange || prop[1] !== prevProps[prop[0]], false);
 
-    const fixedPrevColumns = this.cleanProps(prevProps.columns);
-    const fixedPropsColumns = this.cleanProps(this.props.columns);
-    const fixedPrevData = this.cleanProps(prevProps.data);
-    const fixedPropsData = this.cleanProps(this.props.data);
+    const fixedPrevColumns = this.cleanColumns(prevProps.columns);
+    const fixedPropsColumns = this.cleanColumns(this.props.columns);
 
     const columnPropsChanged = !equal(fixedPrevColumns, fixedPropsColumns);
     let propsChanged =
       columnPropsChanged || !equal(prevProps.options, this.props.options);
     if (!this.isRemoteData()) {
-      propsChanged = propsChanged || !equal(fixedPrevData, fixedPropsData);
+      propsChanged = propsChanged || !equal(prevProps.data, this.props.data);
     }
 
     if (propsChanged) {
@@ -672,13 +682,18 @@ export default class MaterialTable extends React.Component {
         .then((result) => {
           query.totalCount = result.totalCount;
           query.page = result.page;
+          const nextQuery = {
+            ...query,
+            totalCount: result.totalCount,
+            page: result.page
+          };
           this.dataManager.setData(result.data);
           this.setState(
             {
               isLoading: false,
               errorState: false,
               ...this.dataManager.getRenderState(),
-              query
+              query: nextQuery
             },
             () => {
               callback && callback();
@@ -1055,7 +1070,6 @@ export default class MaterialTable extends React.Component {
 
   render() {
     const props = this.getProps();
-
     return (
       <DragDropContext
         onDragEnd={this.onDragEnd}
