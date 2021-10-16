@@ -473,6 +473,41 @@ var DataManager = /*#__PURE__*/ (function () {
   (0, _createClass2['default'])(DataManager, [
     {
       key: 'setData',
+      // value: function setData(data) {
+      //   var _this2 = this;
+
+      //   this.selectedCount = 0;
+      //   var prevData = this.data; // current data has info regarding what is open/being edited
+
+      //   this.data = data.map(function (row, index) {
+      //     var prevTableData = [];
+      //     var rowID = row.id || index; //allow use the opportunity to set their own ID
+      //     // if this row is in our old data, keep the tableData
+
+      //     if (prevData[index]) {
+      //       var prevRow = prevData[index];
+      //       prevTableData = prevRow.tableData; // hold onto tableData
+
+      //       delete prevRow.tableData; // clean the prevRow for compare
+      //       // if the user is passing an id we can assume they always have been and thus check if the ids match and clear prevData if they don't match
+
+      //       if (row.id && row.id !== prevTableData.id) {
+      //         prevTableData = [];
+      //       }
+      //     }
+
+      //     row.tableData = _objectSpread(_objectSpread(_objectSpread({}, row.tableData), prevTableData), {}, {
+      //       id: rowID
+      //     }); // combine previous table data for this row with this row's data to insure user interaction not cancelled
+
+      //     if (row.tableData.checked) {
+      //       _this2.selectedCount++;
+      //     }
+
+      //     return row;
+      //   });
+      //   this.filtered = false;
+      // }
       value: function setData(data) {
         var _this2 = this;
 
@@ -499,7 +534,7 @@ var DataManager = /*#__PURE__*/ (function () {
             );
           }
         }
-
+        console.log('entroumamou', this.data);
         this.data = data.map(function (row, index) {
           var prevTableData = prevDataObject[row.id] || {};
 
@@ -544,6 +579,8 @@ var DataManager = /*#__PURE__*/ (function () {
 
           return newRow;
         });
+        console.log('entroumamou2', this.data);
+
         this.filtered = false;
       }
     },
@@ -761,9 +798,10 @@ var DataManager = /*#__PURE__*/ (function () {
     {
       key: 'changeRowEditing',
       value: function changeRowEditing(rowData, mode) {
+        console.log('aqio', rowData);
+        console.log('testevamos', this.lastEditingRow);
         if (rowData) {
           if (rowData.tableData) rowData.tableData.editing = mode;
-
           if (
             this.lastEditingRow &&
             this.lastEditingRow.tableData &&
@@ -778,7 +816,7 @@ var DataManager = /*#__PURE__*/ (function () {
             this.lastEditingRow = undefined;
           }
         } else if (this.lastEditingRow) {
-          // this.lastEditingRow.tableData.editing = undefined;
+          this.lastEditingRow.tableData.editing = undefined;
           this.lastEditingRow = undefined;
         }
       }
